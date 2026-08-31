@@ -57,6 +57,9 @@ app.use(async (req, res, next) => {
   next();
 });
 
+// Handle browser favicon requests
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
 // Root welcome & status endpoint
 app.get('/', (req, res) => {
   res.status(200).json({
