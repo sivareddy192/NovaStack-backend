@@ -79,9 +79,22 @@ app.use('/api/*', (req, res) => {
   });
 });
 
+// Ensure DB connection in serverless environment
+app.use(async (req, res, next) => {
+  if (!isDbConnected()) {
+    await connectDB();
+  }
+  next();
+});
+
 // Centralized error handler
 app.use(errorHandler);
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 [NovaStack Server] Running on http://127.0.0.1:${PORT}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 [NovaStack Server] Running on http://127.0.0.1:${PORT}`);
+  });
+}
+
+export default app;
+
