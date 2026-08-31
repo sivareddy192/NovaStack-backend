@@ -49,8 +49,23 @@ if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('dev'));
 }
 
-// Apply standard rate limiter to all API endpoints
-app.use('/api', generalLimiter);
+// Ensure DB connection in serverless environment
+app.use(async (req, res, next) => {
+  if (!isDbConnected()) {
+    await connectDB();
+  }
+  next();
+});
+
+// Root welcome & status endpoint
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'online',
+    system: 'NovaStack API Server',
+    message: 'Backend is running successfully',
+    healthCheck: '/api/health',
+  });
+});
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -72,19 +87,11 @@ app.use('/api/estimator', estimatorRoutes);
 app.use('/api/admin', adminRoutes);
 
 // 404 Handler for undefined routes
-app.use('/api/*', (req, res) => {
+app.use('*', (req, res) => {
   res.status(404).json({
     success: false,
     message: `API Route ${req.originalUrl} not found`,
   });
-});
-
-// Ensure DB connection in serverless environment
-app.use(async (req, res, next) => {
-  if (!isDbConnected()) {
-    await connectDB();
-  }
-  next();
 });
 
 // Centralized error handler
