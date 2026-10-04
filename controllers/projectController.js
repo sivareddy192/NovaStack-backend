@@ -1,16 +1,14 @@
 import Project from '../models/Project.js';
-import { seedProjects } from '../config/seedData.js';
+import mongoose from 'mongoose';
 import { isDbConnected } from '../config/db.js';
-
-let localProjects = [...seedProjects];
 
 export const getProjects = async (req, res) => {
   try {
-    const { category, featured, search } = req.query;
+    const { category, featured, search, includeUnpublished } = req.query;
 
     if (isDbConnected()) {
       try {
-        const query = { published: true };
+        const query = includeUnpublished === 'true' ? {} : { published: true };
 
         if (category && category !== 'All') {
           query.category = category;
@@ -30,37 +28,22 @@ export const getProjects = async (req, res) => {
 
         const projects = await Project.find(query).sort({ order: 1, createdAt: -1 });
 
-        if (projects && projects.length > 0) {
-          return res.status(200).json({
-            success: true,
-            count: projects.length,
-            data: projects,
-          });
-        }
-      } catch (dbErr) {}
+        return res.status(200).json({
+          success: true,
+          count: projects.length,
+          data: projects,
+        });
+      } catch (dbErr) {
+        return res.status(500).json({
+          success: false,
+          message: 'Unable to load projects from the database.',
+        });
+      }
     }
 
-    let filtered = localProjects.filter((p) => p.published !== false);
-    if (category && category !== 'All') {
-      filtered = filtered.filter((p) => p.category === category);
-    }
-    if (featured === 'true') {
-      filtered = filtered.filter((p) => p.featured === true);
-    }
-    if (search) {
-      const s = search.toLowerCase();
-      filtered = filtered.filter(
-        (p) =>
-          p.title.toLowerCase().includes(s) ||
-          p.description.toLowerCase().includes(s) ||
-          p.technologies.some((t) => t.toLowerCase().includes(s))
-      );
-    }
-
-    res.status(200).json({
-      success: true,
-      count: filtered.length,
-      data: filtered,
+    return res.status(503).json({
+      success: false,
+      message: 'Project database is unavailable.',
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message || 'Server error' });
@@ -73,30 +56,23 @@ export const getProjectBySlug = async (req, res) => {
 
     if (isDbConnected()) {
       try {
-        const project = await Project.findOne({ slug, published: true });
+        const lookup = mongoose.isValidObjectId(slug)
+          ? { $or: [{ _id: slug }, { slug: slug }], published: true }
+          : { slug, published: true };
+        const project = await Project.findOne(lookup);
         if (project) {
           return res.status(200).json({
             success: true,
             data: project,
           });
         }
+
       } catch (e) {}
     }
 
-    const fallbackProject = localProjects.find(
-      (p) => p.slug === slug || p.slug.toLowerCase() === slug.toLowerCase()
-    );
-
-    if (!fallbackProject) {
-      return res.status(404).json({
-        success: false,
-        message: `Project with slug '${slug}' not found`,
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      data: fallbackProject,
+    return res.status(503).json({
+      success: false,
+      message: 'Project database is unavailable.',
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message || 'Server error' });
@@ -112,17 +88,20 @@ export const createProject = async (req, res) => {
           success: true,
           data: project,
         });
-      } catch (dbErr) {}
+      } catch (dbErr) {
+        return res.status(400).json({
+          success: false,
+          message: dbErr.message || 'Unable to save project to the database.',
+        });
+      }
     }
 
-    const newProj = { ...req.body, _id: `proj-${Date.now()}`, createdAt: new Date() };
-    localProjects.unshift(newProj);
-    return res.status(201).json({
-      success: true,
-      data: newProj,
+    return res.status(503).json({
+      success: false,
+      message: 'Project database is unavailable.',
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message || 'Server error' });
+    return res.status(500).json({ success: false, message: error.message || 'Server error' });
   }
 };
 
@@ -130,37 +109,34 @@ export const updateProject = async (req, res) => {
   try {
     const { id } = req.params;
 
-    if (isDbConnected()) {
-      try {
-        const project = await Project.findByIdAndUpdate(id, req.body, {
-          new: true,
-          runValidators: true,
-        });
-
-        if (project) {
-          return res.status(200).json({
-            success: true,
-            data: project,
-          });
-        }
-      } catch (e) {}
-    }
-
-    const index = localProjects.findIndex((p) => p._id === id || p.slug === id);
-    if (index !== -1) {
-      localProjects[index] = { ...localProjects[index], ...req.body };
-      return res.status(200).json({
-        success: true,
-        data: localProjects[index],
+    if (!isDbConnected()) {
+      return res.status(503).json({
+        success: false,
+        message: 'Project database is unavailable.',
       });
     }
 
-    res.status(404).json({
-      success: false,
-      message: 'Project not found',
+    const lookup = mongoose.isValidObjectId(id)
+      ? { $or: [{ _id: id }, { slug: id }] }
+      : { slug: id };
+    const project = await Project.findOneAndUpdate(lookup, req.body, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: 'Project not found in the database.',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: project,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message || 'Server error' });
+    return res.status(400).json({ success: false, message: error.message || 'Unable to update project' });
   }
 };
 
@@ -168,13 +144,20 @@ export const deleteProject = async (req, res) => {
   try {
     const { id } = req.params;
 
-    if (isDbConnected()) {
-      try {
-        await Project.findByIdAndDelete(id);
-      } catch (e) {}
+    if (!isDbConnected()) {
+      return res.status(503).json({
+        success: false,
+        message: 'Project database is unavailable.',
+      });
     }
 
-    localProjects = localProjects.filter((p) => p._id !== id && p.slug !== id);
+    const lookup = mongoose.isValidObjectId(id)
+      ? { $or: [{ _id: id }, { slug: id }] }
+      : { slug: id };
+    const project = await Project.findOneAndDelete(lookup);
+    if (!project) {
+      return res.status(404).json({ success: false, message: 'Project not found in the database.' });
+    }
 
     res.status(200).json({
       success: true,

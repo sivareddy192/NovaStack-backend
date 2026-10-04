@@ -25,15 +25,8 @@ const projectSchema = new mongoose.Schema(
     category: {
       type: String,
       required: [true, 'Category is required'],
-      enum: [
-        'E-Commerce',
-        'Food Ordering',
-        'Business Website',
-        'SaaS',
-        'Dashboard',
-        'Full-Stack Application',
-      ],
       default: 'Full-Stack Application',
+      trim: true,
     },
     technologies: {
       type: [String],

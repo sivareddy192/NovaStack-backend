@@ -48,6 +48,10 @@ export const submitEstimatorLead = async (req, res) => {
       designLevel,
       timeline,
       contact,
+      numberOfPages,
+      buildType,
+      pricing,
+      customRequirements,
     } = req.body;
 
     const calculation = await calculateProjectEstimate({
@@ -66,6 +70,10 @@ export const submitEstimatorLead = async (req, res) => {
         designLevel,
         timeline: calculation.timeline,
         contact,
+        numberOfPages: numberOfPages || '',
+        buildType: buildType || '',
+        pricing: pricing || {},
+        customRequirements: customRequirements || contact?.description || '',
         estimatedMinPrice: calculation.estimatedMinPrice,
         estimatedMaxPrice: calculation.estimatedMaxPrice,
         currency: calculation.currency,
@@ -87,6 +95,10 @@ export const submitEstimatorLead = async (req, res) => {
         designLevel,
         timeline: calculation.timeline,
         contact,
+        numberOfPages: numberOfPages || '',
+        buildType: buildType || '',
+        pricing: pricing || {},
+        customRequirements: customRequirements || contact?.description || '',
         estimatedMinPrice: calculation.estimatedMinPrice,
         estimatedMaxPrice: calculation.estimatedMaxPrice,
         currency: calculation.currency,
